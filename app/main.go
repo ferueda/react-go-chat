@@ -1,15 +1,23 @@
 package main
 
 import (
+	"flag"
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/ferueda/react-go-chat/trace"
 )
 
 func main() {
+	addr := flag.String("addr", ":8080", "addr of the application.")
+	flag.Parse() // parse the flags
+
 	r := newRoom()
+	r.tracer = trace.New(os.Stdout)
 
 	http.Handle("/", &templateHandler{filename: "chat.html"})
 	http.Handle("/room", r)
@@ -17,7 +25,8 @@ func main() {
 	go r.run()
 
 	// start the web server
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	log.Println("Starting web server on", *addr)
+	if err := http.ListenAndServe(*addr, nil); err != nil {
 		log.Fatal("ListenAndServe:", err)
 	}
 }

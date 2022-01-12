@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/ferueda/react-go-chat/trace"
 	"github.com/gorilla/websocket"
 )
 
@@ -22,6 +23,9 @@ type room struct {
 	leave chan *client
 	// clients holds all current clients in this room.
 	clients map[*client]bool
+	// tracer will receive trace information of activity
+	// in the room.
+	tracer trace.Tracer
 }
 
 func (r *room) run() {
@@ -29,12 +33,16 @@ func (r *room) run() {
 		select {
 		case client := <-r.join:
 			r.clients[client] = true
+			r.tracer.Trace("New client joined")
 		case client := <-r.leave:
 			delete(r.clients, client)
 			close(client.send)
+			r.tracer.Trace("New client left")
 		case msg := <-r.forward:
+			r.tracer.Trace("Message received: ", string(msg))
 			for c := range r.clients {
 				c.send <- msg
+				r.tracer.Trace(" -- sent to client")
 			}
 		}
 	}
@@ -46,6 +54,7 @@ func newRoom() *room {
 		join:    make(chan *client),
 		leave:   make(chan *client),
 		clients: make(map[*client]bool),
+		tracer:  trace.Off(),
 	}
 }
 
