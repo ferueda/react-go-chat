@@ -16,7 +16,7 @@ const (
 type room struct {
 	// forward is a channel that holds incoming messages
 	// that should be forwarded to the clients.
-	forward chan []byte
+	forward chan *message
 	// join is a channel for clients wishing to join the room.
 	join chan *client
 	// leave is a channel for clients wishing to leave the room.
@@ -39,7 +39,7 @@ func (r *room) run() {
 			close(client.send)
 			r.tracer.Trace("New client left")
 		case msg := <-r.forward:
-			r.tracer.Trace("Message received: ", string(msg))
+			r.tracer.Trace("Message received: ", string(msg.Message))
 			for c := range r.clients {
 				c.send <- msg
 				r.tracer.Trace(" -- sent to client")
@@ -50,7 +50,7 @@ func (r *room) run() {
 
 func newRoom() *room {
 	return &room{
-		forward: make(chan []byte),
+		forward: make(chan *message),
 		join:    make(chan *client),
 		leave:   make(chan *client),
 		clients: make(map[*client]bool),
@@ -70,7 +70,13 @@ func (r *room) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	client := newClient(socket, r)
+	claims, err := getClaims(req.URL.Query().Get("t"))
+	if err != nil {
+		log.Fatal("Error getting claims", err)
+		return
+	}
+
+	client := newClient(socket, r, claims["username"].(string))
 
 	r.join <- client
 	defer func() { r.leave <- client }()
