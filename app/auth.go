@@ -27,8 +27,6 @@ func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println("passed validation")
-
 	h.next.ServeHTTP(w, r)
 }
 
@@ -110,4 +108,18 @@ func createToken(username string) (string, error) {
 		return "", err
 	}
 	return token, nil
+}
+
+func getClaims(token string) (jwt.MapClaims, error) {
+	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(accessSecret), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return parsedToken.Claims.(jwt.MapClaims), nil
 }
