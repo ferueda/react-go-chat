@@ -34,48 +34,55 @@ func MustAuth(handler http.Handler) http.Handler {
 	return &authHandler{next: handler}
 }
 
-func tokenHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "*")
+func tokenHandler(room *room) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
 
-	if r.Method == http.MethodOptions {
-		return
-	}
+		if r.Method == http.MethodOptions {
+			return
+		}
 
-	if r.Method != "POST" {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
 
-	var req struct {
-		Username string `json:"username"`
-	}
+		var req struct {
+			Username string `json:"username"`
+		}
 
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
+		err := json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 
-	if req.Username == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
+		if req.Username == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 
-	token, err := createToken(req.Username)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+		if _, ok := room.clients[req.Username]; ok {
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
 
-	w.Header().Add("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	err = json.NewEncoder(w).Encode(struct {
-		Token string `json:"token"`
-	}{Token: token})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		token, err := createToken(req.Username)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		err = json.NewEncoder(w).Encode(struct {
+			Token string `json:"token"`
+		}{Token: token})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
