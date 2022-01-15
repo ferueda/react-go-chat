@@ -22,7 +22,7 @@ type room struct {
 	// leave is a channel for clients wishing to leave the room.
 	leave chan *client
 	// clients holds all current clients in this room.
-	clients map[*client]bool
+	clients map[string]*client
 	// tracer will receive trace information of activity
 	// in the room.
 	tracer trace.Tracer
@@ -32,15 +32,23 @@ func (r *room) run() {
 	for {
 		select {
 		case client := <-r.join:
-			r.clients[client] = true
+			r.clients[client.user.username] = client
+			users := r.getOnlineUsers()
+			for _, c := range r.clients {
+				c.online <- users
+			}
 			r.tracer.Trace("New client joined")
 		case client := <-r.leave:
-			delete(r.clients, client)
+			delete(r.clients, client.user.username)
 			close(client.send)
+			users := r.getOnlineUsers()
+			for _, c := range r.clients {
+				c.online <- users
+			}
 			r.tracer.Trace("New client left")
 		case msg := <-r.forward:
 			r.tracer.Trace("Message received: ", string(msg.Message))
-			for c := range r.clients {
+			for _, c := range r.clients {
 				c.send <- msg
 				r.tracer.Trace(" -- sent to client")
 			}
@@ -53,7 +61,7 @@ func newRoom() *room {
 		forward: make(chan *message),
 		join:    make(chan *client),
 		leave:   make(chan *client),
-		clients: make(map[*client]bool),
+		clients: make(map[string]*client),
 		tracer:  trace.Off(),
 	}
 }
@@ -76,12 +84,36 @@ func (r *room) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	client := newClient(socket, r, claims["username"].(string))
+	var username string
+	if u, ok := claims["username"]; ok {
+		username = u.(string)
+	}
+
+	if _, ok := r.clients[username]; ok {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	var avatar string
+	if a, ok := claims["avatar"]; ok {
+		avatar = a.(string)
+	}
+
+	client := newClient(socket, r, &user{username: username, avatar: avatar})
 
 	r.join <- client
 	defer func() { r.leave <- client }()
 
 	go client.write()
+	go client.newUser()
 
 	client.read()
+}
+
+func (r *room) getOnlineUsers() []string {
+	users := make([]string, 0, len(r.clients))
+	for u := range r.clients {
+		users = append(users, u)
+	}
+	return users
 }

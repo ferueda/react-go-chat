@@ -21,7 +21,7 @@ func main() {
 	r.tracer = trace.New(os.Stdout)
 
 	http.Handle("/room", MustAuth(r))
-	http.HandleFunc("/token", tokenHandler)
+	http.HandleFunc("/token", tokenHandler(r))
 
 	go r.run()
 
