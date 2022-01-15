@@ -12,8 +12,6 @@ export default function LoginForm({ onSubmit }: Props) {
 
   const submitForm = (e: React.ChangeEvent<HTMLFormElement>) => {
     e.preventDefault();
-
-    e.preventDefault();
     if (input === '') return;
 
     onSubmit(input);
